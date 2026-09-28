@@ -266,7 +266,11 @@ mod tests {
             ..Default::default()
         };
         let targets = catalog::build(&env);
-        let ids = targets.iter().map(|t| t.id.clone()).collect::<Vec<_>>();
+        let ids = targets
+            .iter()
+            .filter(|t| PathBuf::from(&t.path).starts_with(&f.root))
+            .map(|t| t.id.clone())
+            .collect::<Vec<_>>();
         let plan = Plan::prepare(1, &targets, &ids, &Guard::new(&env)).unwrap();
         assert_eq!(plan.preview().files.len(), 1);
         assert!(plan.preview().files[0].path.ends_with("mesh.cac"));

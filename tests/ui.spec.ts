@@ -21,6 +21,7 @@ async function mockDesktop(page: Page) {
       target('crash.dumps@demo', 'crash', 'D:\\Games\\Warface', 18000000, 2),
       target('gc.main@demo', 'launcher', 'C:\\Users\\Player\\AppData\\Local\\GameCenter\\main.log', 12000000, 1),
       target('upd.warface@demo', 'updates', 'D:\\VK Play\\Distrib\\packages\\warface', 450000000, 12),
+      target('account.launcher_ini@demo', 'account', 'C:\\Users\\Player\\AppData\\Local\\GameCenter\\GameCenter.ini', 32000, 1),
     ];
     w.__TAURI_INTERNALS__ = {
       metadata: { currentWindow: { label: 'main' }, currentWebview: { label: 'main', windowLabel: 'main' } },

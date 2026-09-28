@@ -25,15 +25,24 @@ Builds are not Authenticode-signed; Windows may show an unknown-publisher warnin
 | Game logs | `Game.log`, `action_history.log`, `server_profile.txt`, `process.txt`, `-gup-/install.log`, `LogBackups/*.log` |
 | Optional caches | Files inside `modelscache`, `BannersCache`, `headscache`, `QueryCache`, `Shaders` in the Warface profile |
 | Optional crash dumps | `*.dmp` directly inside the validated Warface installation |
-| Optional VK Play launcher | `main.log`, `Chrome.log`, `sdump*.dmp`, named catalog manifests; image/common/notification/description/update-list caches; browser `Cache`, `Code Cache`, `GPUCache` and `DawnCache` subfolders |
-| Optional Warface updates | `DownloadPath/packages/warface` |
+| Optional VK Play launcher | `main.log`, `Chrome.log`, `sdump*.dmp`, `config*.xml` manifests; `Cache/Big.Img`, `Cache/Common`, `Cache/Alerts`, `Cache/GameDescription`, `Cache/GamesPatchList`, `Cache/GamesTimeSpent`, `Cache/PlayGamesGet`, `Cache/CurrentAvatar.png`; browser `Cache`, `Code Cache`, `GPUCache`, `DawnCache`; the extracted CEF runtime folder |
+| Optional Warface updates | `DownloadPath/packages/warface`, every other launcher package, `torrents`, `-gup-` updater state |
+| Optional account data | `user_*.cfg`, `pvp_game_room_config.xml`, `Profiles`; launcher `GameCenter.ini` and `configPlays*.dat` |
+| Optional crash reports | `%LOCALAPPDATA%\CrashRpt\UnsentCrashReports` (shared CrashRpt folder) |
 
 Launcher data is shared across games. The launcher category is explicitly opt-in. Browser sign-in
 storage (`Network`, cookies, local/session storage), `GameCenter.ini`, launcher binaries and the
 entire `Chrome` runtime folder are not cleanup targets.
 
-**Never selected:** global Temp folders, unrelated crash reports, other games' update packages,
-game settings or key bindings. Cache, dump, launcher and update categories are off by default. Empty directories are kept. Clearing caches may slow the next game launch; crash
+**Never selected:** global Temp folders, launcher binaries (`*.dll`, `*.exe` outside the CEF
+runtime target), the `AV` video-capture component, and other games' installed data. Cache, dump,
+launcher, update and account categories are off by default. `Profiles` resets key binds and
+graphics settings; `GameCenter.ini` resets launcher settings and requires signing in again.
+Server-side accounts are never touched.
+
+Blocked extensions (`exe`, `dll`, `sys`, `pak`, `ini`, `cfg`, `lnk`, `bat`, `cmd`, `ps1`) are
+rejected per file. Only three targets override this: the shader cache (`pak`), the per-account
+configs (`cfg`), `GameCenter.ini` (`ini`), and the CEF runtime folder. Empty directories are kept. Clearing caches may slow the next game launch; crash
 dumps may be useful to support.
 
 ## Usage and safeguards

@@ -64,7 +64,7 @@ export default function App() {
   };
   const selected = useMemo(() => targets.filter(target => target.exists && selection[target.id]), [targets, selection]);
   const selectedBytes = selected.reduce((sum, target) => sum + target.size, 0);
-  const groups = useMemo<GroupView[]>(() => ["logs", "caches", "crash", "launcher", "updates"].map(id => {
+  const groups = useMemo<GroupView[]>(() => ["logs", "caches", "crash", "launcher", "updates", "account"].map(id => {
     const items = targets.filter(target => target.group === id);
     return { id, targets: items, bytes: items.reduce((n, t) => n + t.size, 0), files: items.reduce((n, t) => n + t.files, 0), exists: items.some(t => t.exists) };
   }).filter(g => g.targets.length), [targets]);

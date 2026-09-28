@@ -36,7 +36,6 @@ pub fn build(env: &Environment) -> Vec<Target> {
             ("log.action_history", "action_history.log"),
             ("log.server_profile", "server_profile.txt"),
             ("log.process", "process.txt"),
-            ("log.updater", "-gup-/install.log"),
         ] {
             add(id, "logs", root, name, TargetKind::File, None, false);
         }
@@ -58,6 +57,24 @@ pub fn build(env: &Environment) -> Vec<Target> {
             Some("*.dmp"),
             true,
         );
+        add(
+            "upd.gup",
+            "updates",
+            root,
+            "-gup-",
+            TargetKind::Contents,
+            None,
+            true,
+        );
+        add(
+            "cache.shader_pak",
+            "caches",
+            root,
+            "Engine/ShaderCache.pak",
+            TargetKind::File,
+            None,
+            true,
+        );
     }
     for root in &env.profile_roots {
         for (id, name) in [
@@ -69,6 +86,33 @@ pub fn build(env: &Environment) -> Vec<Target> {
         ] {
             add(id, "caches", root, name, TargetKind::Contents, None, true);
         }
+        add(
+            "account.user_cfg",
+            "account",
+            root,
+            "",
+            TargetKind::Glob,
+            Some("user_*.cfg"),
+            true,
+        );
+        add(
+            "account.room_config",
+            "account",
+            root,
+            "pvp_game_room_config.xml",
+            TargetKind::File,
+            None,
+            true,
+        );
+        add(
+            "account.profiles",
+            "account",
+            root,
+            "Profiles",
+            TargetKind::Contents,
+            None,
+            true,
+        );
     }
     if let Some(root) = &env.gamecenter_dir {
         for (id, name) in [("gc.main", "main.log"), ("gc.chrome_log", "Chrome.log")] {
@@ -96,9 +140,21 @@ pub fn build(env: &Environment) -> Vec<Target> {
             ("gc.user_cache", "Cache/ChromeUser/Cache"),
             ("gc.user_code", "Cache/ChromeUser/Code Cache"),
             ("gc.user_gpu", "Cache/ChromeUser/GPUCache"),
+            ("gc.time_spent", "Cache/GamesTimeSpent"),
+            ("gc.play_games", "Cache/PlayGamesGet"),
+            ("gc.cef", "Chrome"),
         ] {
             add(id, "launcher", root, name, TargetKind::Contents, None, true);
         }
+        add(
+            "gc.avatar",
+            "launcher",
+            root,
+            "Cache/CurrentAvatar.png",
+            TargetKind::File,
+            None,
+            true,
+        );
         for (id, name) in [
             ("gc.config_games", "configBigGames.xml"),
             ("gc.config_repository", "configMainRepository.xml"),
@@ -106,6 +162,24 @@ pub fn build(env: &Environment) -> Vec<Target> {
         ] {
             add(id, "launcher", root, name, TargetKind::File, None, true);
         }
+        add(
+            "account.launcher_ini",
+            "account",
+            root,
+            "GameCenter.ini",
+            TargetKind::File,
+            None,
+            true,
+        );
+        add(
+            "account.launcher_plays",
+            "account",
+            root,
+            "",
+            TargetKind::Glob,
+            Some("configPlays*.dat"),
+            true,
+        );
     }
     if let Some(root) = &env.download_path {
         add(
@@ -117,9 +191,54 @@ pub fn build(env: &Environment) -> Vec<Target> {
             None,
             true,
         );
+        add(
+            "upd.packages",
+            "updates",
+            root,
+            "packages",
+            TargetKind::Contents,
+            None,
+            true,
+        );
+        add(
+            "upd.torrents",
+            "updates",
+            root,
+            "torrents",
+            TargetKind::Contents,
+            None,
+            true,
+        );
+    }
+    if let Some(local) = dirs::data_local_dir() {
+        let crash = local.join("CrashRpt").join("UnsentCrashReports");
+        if crash.is_dir() {
+            add(
+                "crash.crashrpt",
+                "crash",
+                &local.to_string_lossy(),
+                "CrashRpt/UnsentCrashReports",
+                TargetKind::Contents,
+                None,
+                true,
+            );
+        }
     }
     targets.sort_by(|a, b| a.id.cmp(&b.id));
     targets
+}
+
+/// Targets whose payload legitimately contains otherwise blocked extensions.
+fn extension_override(target_id: &str) -> Option<&'static [&'static str]> {
+    match target_id.split('@').next().unwrap_or_default() {
+        "cache.shader_pak" => Some(&["pak"]),
+        "account.user_cfg" => Some(&["cfg"]),
+        "account.launcher_ini" => Some(&["ini"]),
+        "gc.cef" => Some(&[
+            "exe", "dll", "pak", "bin", "dat", "json", "ini", "cfg", "so",
+        ]),
+        _ => None,
+    }
 }
 
 pub fn permits(target: &Target, path: &Path) -> bool {
@@ -138,10 +257,14 @@ pub fn permits(target: &Target, path: &Path) -> bool {
         .and_then(|s| s.to_str())
         .unwrap_or("")
         .to_ascii_lowercase();
-    if matches!(
-        extension.as_str(),
-        "exe" | "dll" | "sys" | "pak" | "ini" | "cfg" | "lnk" | "bat" | "cmd" | "ps1"
-    ) {
+    let overridden =
+        extension_override(&target.id).is_some_and(|list| list.contains(&extension.as_str()));
+    if !overridden
+        && matches!(
+            extension.as_str(),
+            "exe" | "dll" | "sys" | "pak" | "ini" | "cfg" | "lnk" | "bat" | "cmd" | "ps1"
+        )
+    {
         return false;
     }
     match target.kind {
@@ -203,18 +326,62 @@ mod tests {
         assert!(!targets.is_empty());
         assert!(targets.iter().all(|t| matches!(
             t.group.as_str(),
-            "logs" | "caches" | "crash" | "launcher" | "updates"
+            "logs" | "caches" | "crash" | "launcher" | "updates" | "account"
         )));
-        assert!(targets.iter().any(|t| t.id.starts_with("gc.main@")));
-        assert!(targets.iter().any(|t| t.id.starts_with("upd.warface@")));
         assert!(targets
             .iter()
-            .all(|t| !t.path.ends_with("GameCenter.ini") && !t.path.ends_with("Chrome")));
+            .any(|t| t.id.starts_with("account.user_cfg@")));
+        assert!(targets
+            .iter()
+            .any(|t| t.id.starts_with("cache.shader_pak@")));
+        assert!(targets.iter().any(|t| t.id.starts_with("upd.packages@")));
+        assert!(targets.iter().any(|t| t.id.starts_with("gc.cef@")));
+        assert!(targets.iter().any(|t| t.id.starts_with("gc.main@")));
+        assert!(targets.iter().any(|t| t.id.starts_with("upd.warface@")));
+        let ini = targets
+            .iter()
+            .find(|t| t.id.starts_with("account.launcher_ini@"))
+            .unwrap();
+        assert!(!ini.default_on && ini.risk == "caution");
+        assert!(targets.iter().all(|t| !t.path.contains("Local Storage")
+            && !t.path.contains("Session Storage")
+            && !t.path.contains("IndexedDB")
+            && !t.path.contains("Network")));
         assert!(targets.iter().all(|t| !t.id.starts_with("profile.")));
         assert!(targets
             .iter()
             .filter(|t| t.risk == "caution")
             .all(|t| !t.default_on));
+    }
+
+    #[test]
+    fn blocked_extensions_open_only_for_their_target() {
+        let env = Environment {
+            game_roots: vec![r"C:\WF".into()],
+            profile_roots: vec![r"C:\Users\Tester\Saved Games\My Games\Warface".into()],
+            ..Default::default()
+        };
+        let targets = build(&env);
+        let find = |prefix: &str| targets.iter().find(|t| t.id.starts_with(prefix)).unwrap();
+        let shader = find("cache.shader_pak@");
+        assert!(permits(shader, &PathBuf::from(&shader.path)));
+        let backups = find("log.backups@");
+        assert!(!permits(
+            backups,
+            &Path::new(&backups.path).join("payload.pak")
+        ));
+        assert!(!permits(
+            backups,
+            &Path::new(&backups.path).join("payload.dll")
+        ));
+        let cfg = find("account.user_cfg@");
+        assert!(permits(cfg, &Path::new(&cfg.path).join("user_1.cfg")));
+        assert!(!permits(cfg, &Path::new(&cfg.path).join("user_1.exe")));
+        let shaders = find("cache.shaders@");
+        assert!(!permits(
+            shaders,
+            &Path::new(&shaders.path).join("Engine.dll")
+        ));
     }
 
     #[test]
@@ -232,7 +399,11 @@ mod tests {
             ..Default::default()
         };
         let targets = build(&env);
-        assert_eq!(targets.len(), 7);
+        let own: Vec<_> = targets
+            .iter()
+            .filter(|t| Path::new(&t.path).starts_with(r"C:\WF"))
+            .collect();
+        assert_eq!(own.len(), 8);
         let logs = targets
             .iter()
             .find(|t| t.id.starts_with("log.backups@"))
