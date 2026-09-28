@@ -1,0 +1,136 @@
+name: Windows build and release
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: windows-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: windows-2022
+    timeout-minutes: 45
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '24.15.0'
+      - name: Install pnpm
+        run: npm install --global pnpm@10.33.1
+      - name: Install Rust
+        run: rustup toolchain install 1.96.0 --profile minimal --component rustfmt --component clippy
+      - name: Select Rust
+        run: rustup default 1.96.0
+      - name: Check release version
+        id: version
+        run: |
+          $package = Get-Content package.json -Raw | ConvertFrom-Json
+          $tauri = Get-Content src-tauri/tauri.conf.json -Raw | ConvertFrom-Json
+          $cargo = Get-Content src-tauri/Cargo.toml -Raw
+          $version = $package.version
+          if ($version -notmatch '^\d+\.\d+\.\d+$') { throw 'Expected a stable semantic version' }
+          if ($tauri.version -ne $version -or $cargo -notmatch ('(?m)^version = "' + [regex]::Escape($version) + '"\r?$')) { throw 'Package versions disagree' }
+          if ($env:GITHUB_REF_TYPE -eq 'tag' -and $env:GITHUB_REF_NAME -ne "v$version") { throw 'Tag does not match package version' }
+          "version=$version" >> $env:GITHUB_OUTPUT
+      - name: Install locked frontend dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Check Rust formatting
+        run: cargo fmt --manifest-path src-tauri/Cargo.toml --check
+      - name: Rust safety regression tests
+        run: cargo test --manifest-path src-tauri/Cargo.toml --lib --locked
+      - name: Clippy
+        run: cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets --locked -- -D warnings
+      - name: Typecheck and build frontend
+        run: pnpm build
+      - name: Install test browser
+        run: pnpm exec playwright install chromium
+      - name: UI regression tests
+        run: pnpm test
+      - name: Package Windows application
+        run: pnpm tauri build --ci
+      - name: Stage release files
+        env:
+          APP_VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          New-Item -ItemType Directory release-assets | Out-Null
+          $base = "Warface-Log-Cleaner-$env:APP_VERSION-windows-x64"
+          Copy-Item 'src-tauri/target/release/warface-log-cleaner.exe' "release-assets/$base-portable.exe"
+          $installers = @(Get-ChildItem 'src-tauri/target/release/bundle/nsis/*-setup.exe')
+          if ($installers.Count -ne 1) { throw 'Expected exactly one NSIS installer' }
+          Copy-Item $installers[0].FullName "release-assets/$base-setup.exe"
+          Get-ChildItem release-assets/*.exe | Sort-Object Name | ForEach-Object {
+            $hash = (Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+            "$hash  $($_.Name)"
+          } | Set-Content release-assets/SHA256SUMS.txt -Encoding utf8NoBOM
+      - name: Upload Windows binaries
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: windows-x64
+          path: release-assets/*
+          if-no-files-found: error
+          retention-days: 14
+      - name: Upload UI test results
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: ui-test-results
+          path: test-results/
+          if-no-files-found: ignore
+          retention-days: 7
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: windows-2022
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: windows-x64
+          path: release-assets
+      - name: Publish verified Windows release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ github.ref_name }}
+          RELEASE_VERSION: ${{ needs.build.outputs.version }}
+        run: |
+          $files = @(Get-ChildItem release-assets -File)
+          if ($files.Count -ne 3) { throw 'Expected two executables and checksums' }
+          $notes = @"
+          ## Windows x64
+          **Recommended:** download the setup.exe installer.
+          **Portable:** run portable.exe without installing the app (requires WebView2 Runtime).
+          SHA256SUMS.txt contains download checksums. Binaries are not Authenticode-signed.
+
+          ## Windows x64 / Русский
+          **Рекомендуется:** установщик setup.exe.
+          **Без установки:** portable.exe (требуется WebView2 Runtime).
+          Проверяйте SHA-256 по файлу SHA256SUMS.txt. Сборки без цифровой подписи Authenticode.
+
+          Warface logs, caches, dumps and update packages; opt-in VK Play launcher logs and caches. No global Temp cleanup. Settings and sign-in data are preserved.
+          "@
+          gh release create $env:RELEASE_TAG --verify-tag --draft --title "Warface Log Cleaner $env:RELEASE_VERSION" --notes $notes
+          if ($LASTEXITCODE -ne 0) { throw 'Could not create draft release; existing tags are not overwritten' }
+          gh release upload $env:RELEASE_TAG @($files.FullName)
+          if ($LASTEXITCODE -ne 0) { throw 'Upload failed; release remains a draft' }
+          gh release edit $env:RELEASE_TAG --draft=false
+          if ($LASTEXITCODE -ne 0) { throw 'Could not publish release' }

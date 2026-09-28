@@ -1,0 +1,145 @@
+import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+
+export type Lang = "ru" | "en";
+const words = {
+  "app.lang": ["Язык", "Language"],
+  "app.tagline": ["Неофициальная утилита", "Unofficial utility"],
+  "nav.clean": ["Очистка", "Cleanup"],
+  "nav.activity": ["Журнал", "Activity"],
+  "nav.settings": ["Расположение игры", "Game location"],
+  "heading": ["Порядок перед игрой", "Ready for the next game"],
+  "intro": ["Удалите лишние файлы Warface. Настройки и другие приложения останутся на месте.", "Remove leftover Warface files. Keep your settings and other applications untouched."],
+  "scope": ["Только Warface", "Warface only"],
+  "scope.detail": ["Без очистки Temp, данных лаунчера и сброса профиля.", "No Temp cleanup, shared launcher data removal or profile reset."],
+  "selected": ["Выбрано", "Selected"],
+  "found": ["Всего найдено", "Total found"],
+  "files": ["Файлов", "Files"],
+  "files.one": ["файл", "file"],
+  "files.few": ["файла", "files"],
+  "files.many": ["файлов", "files"],
+  "hero.files": ["файлов", "files"],
+  "free": ["Свободно на диске", "Free on disk"],
+  "scan": ["Сканировать", "Scan"],
+  "scan.again": ["Пересканировать", "Scan again"],
+  "scanning": ["Проверяем файлы…", "Checking files…"],
+  "preparing": ["Готовим список…", "Preparing file list…"],
+  "cleaning": ["Удаляем выбранное…", "Removing selected files…"],
+  "ready": ["Сканирование завершено", "Scan complete"],
+  "initial": ["Нажмите «Сканировать»", "Click Scan to begin"],
+  "review": ["Очистить", "Clean"],
+  "preview.title": ["Удалить выбранное?", "Delete selected files?"],
+  "preview.note": ["Файлы будут удалены без корзины. Отменить действие нельзя.", "Files will be permanently deleted, without the Recycle Bin."],
+  "confirm": ["Удалить эти файлы", "Delete these files"],
+  "cancel": ["Отмена", "Cancel"],
+  "file.path": ["Файл", "File"],
+  "file.size": ["Размер", "Size"],
+  "more": ["Показать ещё", "Show more"],
+  "preview.empty": ["Доступных для удаления файлов нет.", "No files available for deletion."],
+  "skipped": ["Пропущено", "Skipped"],
+  "done": ["Очистка завершена", "Cleanup complete"],
+  "removed": ["Удалено", "Removed"],
+  "dismiss": ["Закрыть", "Dismiss"],
+  "groups.title": ["Что очистить", "Choose what to clean"],
+  "groups.all": ["Выбрать всё", "Select all"],
+  "groups.none": ["Снять выбор", "Select none"],
+  "groups.safe": ["Только логи", "Logs only"],
+  "groups.empty": ["Warface не найден. Укажите папку игры в разделе «Расположение игры».", "Warface was not found. Set its folder in Game location."],
+  "group.logs.title": ["Логи игры", "Game logs"],
+  "group.logs.desc": ["Журналы запусков и прошлых сессий", "Launch journals and previous sessions"],
+  "group.caches.title": ["Кэш игры", "Game cache"],
+  "group.caches.desc": ["Пересоздаётся игрой. Следующий запуск может занять дольше", "Rebuilt by the game. The next launch may take longer"],
+  "group.crash.title": ["Дампы ошибок", "Crash dumps"],
+  "group.crash.desc": ["Могут понадобиться поддержке.", "Support may need these files."],
+  "group.launcher.title": ["Лаунчер VK Play", "VK Play launcher"],
+  "group.launcher.desc": ["Общие логи и кэши лаунчера. Авторизация сохраняется.", "Shared launcher logs and caches. Sign-in data is kept."],
+  "group.updates.title": ["Обновления Warface", "Warface updates"],
+  "group.updates.desc": ["Загруженные пакеты. При необходимости скачаются заново.", "Downloaded packages. Downloaded again if needed."],
+  "target.gc.main": ["Журнал лаунчера", "Launcher log"],
+  "target.gc.chrome_log": ["Журнал браузера", "Browser log"],
+  "target.gc.dumps": ["Дампы лаунчера", "Launcher dumps"],
+  "target.gc.images": ["Изображения", "Images"],
+  "target.gc.common": ["Общий кэш", "Common cache"],
+  "target.gc.alerts": ["Уведомления", "Notification cache"],
+  "target.gc.descriptions": ["Описания игр", "Game descriptions"],
+  "target.gc.patches": ["Списки обновлений", "Update lists"],
+  "target.gc.browser_cache": ["Кэш браузера", "Browser cache"],
+  "target.gc.browser_code": ["Кэш скриптов", "Script cache"],
+  "target.gc.browser_gpu": ["Кэш GPU", "GPU cache"],
+  "target.gc.browser_dawn": ["Кэш рендера", "Render cache"],
+  "target.gc.user_cache": ["Кэш интерфейса", "Interface cache"],
+  "target.gc.user_code": ["Кэш скриптов интерфейса", "Interface script cache"],
+  "target.gc.user_gpu": ["Кэш GPU интерфейса", "Interface GPU cache"],
+  "target.upd.warface": ["Пакеты Warface", "Warface packages"],
+  "target.gc.config_games": ["Каталог игр", "Game catalog"],
+  "target.gc.config_repository": ["Манифест загрузок", "Download manifest"],
+  "target.gc.config_mirrors": ["Список серверов загрузки", "Download mirrors"],
+  "target.log.game": ["Текущий журнал", "Current game log"],
+  "target.log.backups": ["Архив журналов", "Previous session logs"],
+  "target.log.action_history": ["История действий", "Action history"],
+  "target.log.server_profile": ["Диагностика сервера", "Server diagnostics"],
+  "target.log.process": ["Диагностика запуска", "Launch diagnostics"],
+  "target.log.updater": ["Журнал обновлений", "Update log"],
+  "target.cache.models": ["Кэш моделей", "Model cache"],
+  "target.cache.banners": ["Кэш баннеров", "Banner cache"],
+  "target.cache.heads": ["Кэш персонажей", "Character cache"],
+  "target.cache.query": ["Кэш запросов", "Query cache"],
+  "target.cache.shaders": ["Кэш шейдеров", "Shader cache"],
+  "target.crash.dumps": ["Дампы Warface", "Warface dumps"],
+  "risk.caution": ["По выбору", "Optional"],
+  "status.reveal": ["Открыть расположение", "Open location"],
+  "status.paths.notFound": ["Не найдено", "Not found"],
+  "status.admin.action": ["Перезапустить с правами администратора", "Restart as administrator"],
+  "status.admin.hint": ["Используйте только при ошибке доступа к папке игры.", "Use only if access to the game folder is denied."],
+  "status.running.none": ["Игра и лаунчер закрыты", "Game and launcher are closed"],
+  "status.running": ["Перед удалением закройте игру и лаунчер самостоятельно.", "Close the game and launcher yourself before deleting files."],
+  "console.title": ["Журнал действий", "Activity log"],
+  "console.clear": ["Очистить журнал", "Clear activity"],
+  "console.empty": ["Здесь появятся результаты сканирования и очистки.", "Scan and cleanup results will appear here."],
+  "path.label": ["Папка игры", "Game folder"],
+  "path.help": ["Папка с Bin64Release, Game и Engine.", "Folder containing Bin64Release, Game and Engine."],
+  "path.placeholder": ["Например: D:\\Games\\Warface", "For example: D:\\Games\\Warface"],
+  "path.apply": ["Проверить путь", "Check location"],
+  "path.auto": ["Автоопределение", "Auto-detect"],
+  "path.profile": ["Профиль", "Profile"],
+  "path.detected": ["Найденные папки", "Detected folders"],
+  "preview.browser": ["Просмотр UI в браузере. Файлы недоступны; откройте Windows-приложение.", "Browser UI preview. Files are unavailable; open the Windows application."],
+  "error.busy": ["Операция уже выполняется. Дождитесь завершения.", "An operation is in progress. Wait for it to finish."],
+  "error.empty_selection": ["Выберите хотя бы одну категорию.", "Select at least one category."],
+  "error.unknown_target": ["Список устарел. Запустите сканирование заново.", "The list is out of date. Scan again."],
+  "error.preview_expired": ["Предпросмотр устарел. Проверьте список файлов заново.", "The preview has expired. Review the file list again."],
+  "error.confirmation_required": ["Удаление требует подтверждения.", "Deletion requires confirmation."],
+  "error.close_game_and_launcher": ["Закройте Warface и GameCenter, затем повторите подтверждение.", "Close Warface and GameCenter, then confirm again."],
+  "error.invalid_game_path": ["В папке не найдены файлы Warface. Проверьте путь к корню установленной игры.", "Warface files were not found. Check the installed game's root folder."],
+  "error.generic": ["Операция не выполнена. Проверьте путь и права доступа. Подробности — в журнале.", "The operation failed. Check the path and access permissions. See Activity for details."],
+  "minimize": ["Свернуть", "Minimize"],
+  "maximize": ["Развернуть", "Maximize"],
+  "close": ["Закрыть", "Close"],
+} satisfies Record<string, [string, string]>;
+
+interface I18nValue { lang: Lang; setLang: (lang: Lang) => void; t: (key: string, fallback?: string) => string }
+export function fileLabel(count: number, lang: Lang): string {
+  const plural = new Intl.PluralRules(lang).select(count);
+  return words[plural === "one" ? "files.one" : plural === "few" ? "files.few" : "files.many"][lang === "ru" ? 0 : 1];
+}
+const I18nContext = createContext<I18nValue>({ lang: "ru", setLang: () => undefined, t: (key) => key });
+const STORAGE_KEY = "wlc.lang";
+function detectLang(): Lang {
+  try {
+    const stored = localStorage.getItem(STORAGE_KEY);
+    if (stored === "ru" || stored === "en") return stored;
+  } catch {}
+  return navigator.language.toLowerCase().startsWith("ru") ? "ru" : "en";
+}
+export function I18nProvider({ children }: { children: ReactNode }) {
+  const [lang, update] = useState<Lang>(detectLang);
+  const setLang = useCallback((next: Lang) => {
+    update(next);
+    try { localStorage.setItem(STORAGE_KEY, next); } catch {}
+  }, []);
+  useEffect(() => { document.documentElement.lang = lang; }, [lang]);
+  const value = useMemo<I18nValue>(() => ({ lang, setLang,
+    t: (key, fallback) => (words as Record<string, [string, string]>)[key]?.[lang === "ru" ? 0 : 1] ?? fallback ?? key,
+  }), [lang, setLang]);
+  return <I18nContext.Provider value={value}>{children}</I18nContext.Provider>;
+}
+export function useI18n() { return useContext(I18nContext); }
